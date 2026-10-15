@@ -1,20 +1,29 @@
 {
-  "name": "server",
+  "name": "money-per-click-server",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "description": "+1 Money Per Click game server (Colyseus) for Boxity Legion hosting",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/server.js",
     "dev": "nodemon src/server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
+    "@colyseus/core": "^0.18.18",
+    "@colyseus/schema": "^5.0.40",
+    "@colyseus/ws-transport": "^0.18.4",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "mongodb": "^7.7.0"
+  },
+  "devDependencies": {
     "nodemon": "^3.1.14"
   }
 }

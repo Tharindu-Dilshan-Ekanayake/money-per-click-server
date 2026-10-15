@@ -1,0 +1,4 @@
+node_modules
+# Leaderboard data written at runtime
+data/
+.env

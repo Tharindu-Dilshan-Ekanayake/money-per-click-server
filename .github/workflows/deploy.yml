@@ -1,0 +1,73 @@
+# Build the game server image, push it to this repo's GitHub Container Registry,
+# and tell Boxity Legion to roll it out.
+#   dev branch  -> dev channel  (https://1-money-per-click.dev.host.bloxity.io)
+#   main branch -> prod channel (https://1-money-per-click.host.bloxity.io)
+#
+# Needs one repository secret: LEGION_DEPLOY_TOKEN (My Games -> eye icon).
+# After the first push, make the GHCR package public so Legion can pull it.
+name: Deploy server to Boxity Legion
+
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: legion-deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  GAME_ID: 1-money-per-click
+  # Players per pod = the lobby room's maxClients (src/rooms/LobbyRoom.js).
+  SEAT_CAP: 8
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pick channel and image
+        id: meta
+        run: |
+          if [ "$GITHUB_REF_NAME" = "main" ]; then CHANNEL=prod; else CHANNEL=dev; fi
+          OWNER=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/$OWNER/$GAME_ID-server:$CHANNEL-$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.image }}
+          # Links the package to this repo, so GITHUB_TOKEN can keep pushing to it.
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Roll out on Legion
+        env:
+          LEGION_DEPLOY_TOKEN: ${{ secrets.LEGION_DEPLOY_TOKEN }}
+          CHANNEL: ${{ steps.meta.outputs.channel }}
+          IMAGE: ${{ steps.meta.outputs.image }}
+        run: |
+          if [ -z "$LEGION_DEPLOY_TOKEN" ]; then
+            echo "::error::Add the LEGION_DEPLOY_TOKEN repository secret first."
+            exit 1
+          fi
+          curl -sS --fail-with-body -X POST "https://legion.bloxity.io/v1/apps/$GAME_ID/deploy" \
+            -H "Authorization: Bearer $LEGION_DEPLOY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"channel\":\"$CHANNEL\",\"image\":\"$IMAGE\",\"version\":\"$GITHUB_SHA\",\"seatCap\":$SEAT_CAP}"
